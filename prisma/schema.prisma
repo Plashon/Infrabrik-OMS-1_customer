@@ -1,0 +1,52 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id String @id @default(auto()) @map("_id") @db.ObjectId  
+  customerType      CustomerType     
+  organizationType  OrganizationType?  @default(HEAD_OFFICE)
+  branchName       String?
+  customerCode        String            
+  companyName       String
+  email            String?                   
+  taxId             String          
+  phoneNumber       String?
+  profileImageUrl    String?            @default("https://example.com/default-profile.png")
+  addresses         Address[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Address {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  addressName String
+  recipientName String
+  recipientPhone String
+  addressesInfo  String
+  zipcode     String
+  subdistrict String
+  province    String
+  district    String
+
+  customerId  String      @db.ObjectId   
+  customer    Customer?  @relation(fields: [customerId], references: [id])
+}
+
+
+enum CustomerType {
+  INDIVIDUAL   
+  CORPORATE   
+}
+
+enum OrganizationType {
+  HEAD_OFFICE  
+  BRANCH_OFFICE       
+}
