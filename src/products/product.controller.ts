@@ -495,21 +495,7 @@ export const updateProductSetItem = async (req: Request, res: Response) => {
         message: "ไม่พบเซ็ตสินค้าที่ระบุ",
       });
     }
-    const exsitingData = await prisma.productSetItem.findFirst({
-      where: {
-        id: { not: id },
-        AND: [
-          { productId: validatedData.productId },
-          { productSetId: validatedData.productSetId },
-        ],
-      },
-    });
-    if (exsitingData) {
-      return res.status(400).json({
-        message:
-          "มีสินค้านี้ในเซ็ตนี้อยู่แล้ว ไม่สามารถเพิ่มหรือแก้ไขให้ซ้ำได้",
-      });
-    }
+
     const { productId, productSetId } = req.body;
     const updateProductSetItem = await prisma.productSetItem.update({
       where: { id },
