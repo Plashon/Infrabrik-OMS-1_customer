@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,44 +8,82 @@ datasource db {
 }
 
 model Customer {
-  id String @id @default(auto()) @map("_id") @db.ObjectId  
-  customerType      CustomerType     
-  organizationType  OrganizationType?  @default(HEAD_OFFICE)
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  customerType     CustomerType
+  organizationType OrganizationType? @default(HEAD_OFFICE)
   branchName       String?
-  customerCode        String            
-  companyName       String
-  email            String?                   
-  taxId             String          
-  phoneNumber       String?
-  profileImageUrl    String?            @default("https://example.com/default-profile.png")
-  addresses         Address[]
+  customerCode     String
+  companyName      String
+  email            String?
+  taxId            String
+  phoneNumber      String?
+  profileImageUrl  String?           @default("https://example.com/default-profile.png")
+  addresses        Address[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Address {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-  addressName String
-  recipientName String
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  addressName    String
+  recipientName  String
   recipientPhone String
   addressesInfo  String
-  zipcode     String
-  subdistrict String
-  province    String
-  district    String
+  zipcode        String
+  subdistrict    String
+  province       String
+  district       String
 
-  customerId  String      @db.ObjectId   
-  customer    Customer?  @relation(fields: [customerId], references: [id])
+  customerId String    @db.ObjectId
+  customer   Customer? @relation(fields: [customerId], references: [id])
 }
 
-
 enum CustomerType {
-  INDIVIDUAL   
-  CORPORATE   
+  INDIVIDUAL
+  CORPORATE
 }
 
 enum OrganizationType {
-  HEAD_OFFICE  
-  BRANCH_OFFICE       
+  HEAD_OFFICE
+  BRANCH_OFFICE
+}
+
+model Product {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  productName String
+  productCode String
+  price       Float
+  stock       Int
+  sku         String
+  categoryId  String    @db.ObjectId
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  productSets ProductSetItem[]
+}
+
+model Category {
+  id           String @id @default(auto()) @map("_id") @db.ObjectId
+  categoryName String
+  categoryCode String
+
+  products Product[]
+}
+
+model ProductSet {
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  setName String
+  setCode String
+
+  productItems ProductSetItem[]
+}
+
+model ProductSetItem {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  productId    String @db.ObjectId
+  productSetId String @db.ObjectId
+
+  product Product    @relation(fields: [productId], references: [id])
+  set     ProductSet @relation(fields: [productSetId], references: [id], onDelete: Cascade)
 }
