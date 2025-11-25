@@ -5,6 +5,7 @@ import productRouter from "./products/product.routes";
 import productSetRouter from "./productSet/productSet.routes";
 import categoryRouter from "./category/category.routes";
 import productSetItemRouter from "./productSetItem/productSetItem.routes";
+import orderRouter from "./order/order.routes";
 
 import dotenv from "dotenv";
 dotenv.config();
@@ -19,6 +20,7 @@ app.use("/products", productRouter);
 app.use("/productSets", productSetRouter);
 app.use("/category", categoryRouter);
 app.use("/productSetItems", productSetItemRouter);
+app.use("/orders", orderRouter);
 
 app.get("/", (req, res) => {
   res.send("<h1>this is API for Infrabrik OMS 1 Customer</h1>");
