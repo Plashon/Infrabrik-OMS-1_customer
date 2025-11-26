@@ -305,9 +305,9 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
     const summaryData =
       Array.isArray(summary) && summary.length > 0
         ? {
-            totalOrders: (summary[0] as any)?.totalOrders || 0,
-            totalAmount: (summary[0] as any)?.totalAmount || 0,
-          }
+          totalOrders: (summary[0] as any)?.totalOrders || 0,
+          totalAmount: (summary[0] as any)?.totalAmount || 0,
+        }
         : { totalOrders: 0, totalAmount: 0 };
 
     res.status(200).json({
@@ -336,7 +336,7 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
  */
 export const getSalesReport = async (req: Request, res: Response) => {
   try {
-    const { period = "month" } = req.query; // 'day' or 'month'
+    const { period } = req.query; 
 
     let dateFormat: any;
     let dateField: string;
@@ -396,9 +396,8 @@ export const getSalesReport = async (req: Request, res: Response) => {
     convertObjectIds(salesReport);
 
     res.status(200).json({
-      message: `ดึงรายงานยอดขาย${
-        period === "day" ? "รายวัน" : "รายเดือน"
-      }สำเร็จ`,
+      message: `ดึงรายงานยอดขาย${period === "day" ? "รายวัน" : "รายเดือน"
+        }สำเร็จ`,
       period,
       data: salesReport,
     });
@@ -492,7 +491,7 @@ export const getOrdersByMonth = async (req: Request, res: Response) => {
  */
 export const getTopCustomers = async (req: Request, res: Response) => {
   try {
-    const { limit = 5 } = req.query;
+    const { limit } = req.query;
     const limitNum = parseInt(limit as string, 10) || 5;
 
     const topCustomers = await prisma.order.aggregateRaw({
