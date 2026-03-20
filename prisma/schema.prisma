@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "mongodb"
-  // url      = env("DATABASE_URL")
+  //url      = env("DATABASE_URL")
 }
 
 model Customer {
@@ -19,6 +19,7 @@ model Customer {
   phoneNumber      String?
   profileImageUrl  String?           @default("https://example.com/default-profile.png")
   addresses        Address[]
+  orders           Order[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -86,4 +87,45 @@ model ProductSetItem {
 
   product Product    @relation(fields: [productId], references: [id])
   set     ProductSet @relation(fields: [productSetId], references: [id], onDelete: Cascade)
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  COMPLETED
+  CANCELED
+}
+
+enum PaymentMethod {
+  COD
+  CREDIT_CARD
+  PROMPTPAY
+}
+
+model Order {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber    String        @unique
+  customerId     String        @db.ObjectId
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  items          OrderItem[]
+  shippingAddress Json         
+  totalPrice     Float
+  discount       Float         @default(0)
+  finalPrice     Float
+  status         OrderStatus   @default(PENDING)
+  paymentMethod  PaymentMethod
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model OrderItem {
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  orderId    String  @db.ObjectId
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String  @db.ObjectId
+  productName String
+  price     Float
+  quantity  Int
+  subtotal  Float
 }
