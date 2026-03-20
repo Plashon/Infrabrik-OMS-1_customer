@@ -1,52 +1,131 @@
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "mongodb"
-  url      = env("DATABASE_URL")
+  //url      = env("DATABASE_URL")
 }
 
 model Customer {
-  id String @id @default(auto()) @map("_id") @db.ObjectId  
-  customerType      CustomerType     
-  organizationType  OrganizationType?  @default(HEAD_OFFICE)
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  customerType     CustomerType
+  organizationType OrganizationType? @default(HEAD_OFFICE)
   branchName       String?
-  customerCode        String            
-  companyName       String
-  email            String?                   
-  taxId             String          
-  phoneNumber       String?
-  profileImageUrl    String?            @default("https://example.com/default-profile.png")
-  addresses         Address[]
+  customerCode     String
+  companyName      String
+  email            String
+  taxId            String
+  phoneNumber      String?
+  profileImageUrl  String?           @default("https://example.com/default-profile.png")
+  addresses        Address[]
+  orders           Order[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Address {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-  addressName String
-  recipientName String
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  addressName    String
+  recipientName  String
   recipientPhone String
   addressesInfo  String
-  zipcode     String
-  subdistrict String
-  province    String
-  district    String
+  zipcode        String
+  subdistrict    String
+  province       String
+  district       String
 
-  customerId  String      @db.ObjectId   
-  customer    Customer?  @relation(fields: [customerId], references: [id])
+  customerId String   @db.ObjectId
+  customer   Customer @relation(fields: [customerId], references: [id])
 }
 
-
 enum CustomerType {
-  INDIVIDUAL   
-  CORPORATE   
+  INDIVIDUAL
+  CORPORATE
 }
 
 enum OrganizationType {
-  HEAD_OFFICE  
-  BRANCH_OFFICE       
+  HEAD_OFFICE
+  BRANCH_OFFICE
+}
+
+model Product {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  productName String
+  productCode String   @unique
+  price       Float
+  stock       Int
+  sku         String   @unique
+  categoryId  String   @db.ObjectId
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  productSets ProductSetItem[]
+}
+
+model Category {
+  id           String @id @default(auto()) @map("_id") @db.ObjectId
+  categoryName String
+  categoryCode String @unique
+
+  products Product[]
+}
+
+model ProductSet {
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  setName String
+  setCode String @unique
+
+  productItems ProductSetItem[]
+}
+
+model ProductSetItem {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  productId    String @db.ObjectId
+  productSetId String @db.ObjectId
+
+  product Product    @relation(fields: [productId], references: [id])
+  set     ProductSet @relation(fields: [productSetId], references: [id], onDelete: Cascade)
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  COMPLETED
+  CANCELED
+}
+
+enum PaymentMethod {
+  COD
+  CREDIT_CARD
+  PROMPTPAY
+}
+
+model Order {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber    String        @unique
+  customerId     String        @db.ObjectId
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  items          OrderItem[]
+  shippingAddress Json         
+  totalPrice     Float
+  discount       Float         @default(0)
+  finalPrice     Float
+  status         OrderStatus   @default(PENDING)
+  paymentMethod  PaymentMethod
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model OrderItem {
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  orderId    String  @db.ObjectId
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String  @db.ObjectId
+  productName String
+  price     Float
+  quantity  Int
+  subtotal  Float
 }

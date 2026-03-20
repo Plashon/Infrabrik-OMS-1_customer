@@ -1,188 +1,195 @@
 import { Request, Response } from "express";
 import prisma from "../prisma/client";
+import {
+  CustomerValidator,
+  ValidateCreateCustomer,
+  HeadOfficeType,
+  BranchOfficeType,
+  CustomerTypeSafe,
+  ValidateUpdateCustomer,
+} from "./customer.validator";
+import { CustomerType, OrganizationType } from "@prisma/client";
 
-const createAddress = async (data: {
-  addressName: string;
-  recipientName: string;
-  recipientPhone: string;
-  addressesInfo: string;
-  zipcode: string;
-  subdistrict: string;
-  province: string;
-  district: string;
-  customerId: string;
-}) => {
-  return await prisma.address.create({
-    data,
-  });
+const convertObjectIds = (doc: any) => {
+  if (Array.isArray(doc)) {
+    doc.forEach(convertObjectIds);
+  } else if (typeof doc === "object" && doc !== null) {
+    Object.keys(doc).forEach((key) => {
+      const value = doc[key];
+      if (typeof value === "object" && value !== null) {
+        if ("$oid" in value) {
+          doc[key] = value.$oid;
+        } else {
+          convertObjectIds(value);
+        }
+      }
+    });
+  }
 };
+
+
+
+// Email format check
 function isValidEmail(email: string): boolean {
   const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return regex.test(email);
 }
 
+// Helper: เตรียมข้อมูลลูกค้าสำหรับ Prisma
+const prepareCustomerData = (
+  customerData: CustomerTypeSafe
+): {
+  customerType: CustomerType;
+  organizationType: OrganizationType;
+  customerCode: string;
+  companyName: string;
+  email: string;
+  taxId: string;
+  phoneNumber?: string;
+  profileImageUrl?: string;
+  branchName?: string | null;
+} => {
+  const baseData = {
+    customerType: customerData.customerType as CustomerType,
+    organizationType: customerData.organizationType as OrganizationType,
+    customerCode: customerData.customerCode,
+    companyName: customerData.companyName,
+    email: customerData.email,
+    taxId: customerData.taxId,
+    phoneNumber: customerData.phoneNumber,
+    profileImageUrl: customerData.profileImageUrl,
+  };
+
+  if (customerData.organizationType === "BRANCH_OFFICE") {
+    const branchData = customerData as BranchOfficeType;
+    return {
+      ...baseData,
+      branchName: branchData.branchName,
+    };
+  }
+
+  // HEAD_OFFICE
+  return {
+    ...baseData,
+    branchName: null,
+  };
+};
+
+// Helper: sanitize customer data (ลบ branchName ถ้าเป็น null)
+const sanitizeCustomer = (customer: any) => {
+  if (customer.branchName === null) {
+    const { branchName, ...rest } = customer;
+    return rest;
+  }
+  return customer;
+};
+
 export const createContactInformation = async (req: Request, res: Response) => {
   try {
-    const {
-      customerType,
-      organizationType,
-      customerCode,
-      companyName,
-      email,
-      taxId,
-      phoneNumber,
-      profileImageUrl,
-      addresses,
-    } = req.body;
-    if (organizationType === "HEAD_OFFICE") {
-      if (!customerType || !customerCode || !companyName || !taxId) {
-        return res.status(400).json({ message: "กรุณากรอกข้อมูลให้ครบถ้วน" });
-      }
-      if (!customerType) {
-        return res.status(400).json({ message: "กรุณากรอกประเภทลูกค้า" });
-      }
-      if (!customerCode) {
-        return res.status(400).json({ message: "กรุณากรอกรหัสลูกค้า" });
-      }
-      if (!companyName) {
-        return res.status(400).json({ message: "กรุณากรอกชื่อบริษัท" });
-      }
-      if (!taxId) {
-        return res
-          .status(400)
-          .json({ message: "กรุณากรอกหมายเลขประจำตัวผู้เสียภาษี" });
-      }
-      if (!addresses || !Array.isArray(addresses) || addresses.length === 0) {
-        return res
-          .status(400)
-          .json({ message: "กรุณากรอกที่อยู่อย่างน้อย 1 รายการ" });
-      }
-      const exsitingCustomerCode = await prisma.customer.findFirst({
-        where: { customerCode },
-      });
-      if (exsitingCustomerCode) {
-        return res
-          .status(400)
-          .json({ message: "รหัสลูกค้านี้มีการใช้ในระบบแล้ว กรุณากรอกใหม่" });
-      }
-      if (email && !isValidEmail(email)) {
-        return res.status(400).json({ message: "รูปแบบอีเมลไม่ถูกต้อง" });
-      }
-      // สร้าง contact (ตัวอย่าง)
-      const newCustomerInfo = await prisma.customer.create({
-        data: {
-          customerType,
-          organizationType,
-          customerCode,
-          companyName,
-          email,
-          taxId,
-          phoneNumber,
-          profileImageUrl,
-        },
-      });
-
-      const createdAddresses = await Promise.all(
-        addresses.map((addr: any) =>
-          createAddress({ ...addr, customerId: newCustomerInfo.id })
-        )
-      );
-
-      res.status(201).json({
-        message: "บันทึกข้อมูลติดต่อสำเร็จ",
-        data: { customer: newCustomerInfo, addresses: createdAddresses },
-      });
-    } else if (organizationType === "BRANCH_OFFICE") {
-      const { branchId, branchName } = req.body;
-      if (!customerType || !customerCode || !companyName || !taxId) {
-        return res.status(400).json({ message: "กรุณากรอกข้อมูลให้ครบถ้วน" });
-      }
-      if (!customerType) {
-        return res.status(400).json({ message: "กรุณากรอกประเภทลูกค้า" });
-      }
-      if (!customerCode) {
-        return res.status(400).json({ message: "กรุณากรอกรหัสลูกค้า" });
-      }
-      if (!companyName) {
-        return res.status(400).json({ message: "กรุณากรอกชื่อบริษัท" });
-      }
-      if (!taxId) {
-        return res
-          .status(400)
-          .json({ message: "กรุณากรอกหมายเลขประจำตัวผู้เสียภาษี" });
-      }
-      if (!branchId) {
-        return res.status(400).json({ message: "กรุณากรอกรหัสสาขา" });
-      }
-      if (!branchName) {
-        return res.status(400).json({ message: "กรุณากรอกชื่อสาขา" });
-      }
-      if (!addresses || !Array.isArray(addresses) || addresses.length === 0) {
-        return res
-          .status(400)
-          .json({ message: "กรุณากรอกที่อยู่อย่างน้อย 1 รายการ" });
-      }
-      const exsitingCustomer = await prisma.customer.findFirst({
-        where: { customerCode },
-      });
-      if (exsitingCustomer) {
-        return res
-          .status(400)
-          .json({ message: "รหัสลูกค้านี้มีการใช้ในระบบแล้ว กรุณากรอกใหม่" });
-      }
-      if (email && !isValidEmail(email)) {
-        return res.status(400).json({ message: "รูปแบบอีเมลไม่ถูกต้อง" });
-      }
-      // สร้าง contact (ตัวอย่าง)
-      const newCustomerInfo = await prisma.customer.create({
-        data: {
-          customerType,
-          organizationType,
-          customerCode,
-          companyName,
-          branchName,
-          email,
-          taxId,
-          phoneNumber,
-          profileImageUrl,
-        },
-      });
-
-      const createdAddresses = await Promise.all(
-        addresses.map((addr: any) =>
-          createAddress({ ...addr, customerId: newCustomerInfo.id })
-        )
-      );
-
-      res.status(201).json({
-        message: "บันทึกข้อมูลติดต่อสำเร็จ",
-        data: { customer: newCustomerInfo, addresses: createdAddresses },
+    // Validate customer input
+    const parsed = CustomerValidator.validateCreateCustomer.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "ข้อมูลลูกค้าไม่ถูกต้อง",
+        errors: parsed.error.format(),
       });
     }
+
+    const customerData: CustomerTypeSafe = parsed.data;
+
+    // ตรวจสอบรหัสลูกค้าซ้ำ
+    const existingCustomer = await prisma.customer.findFirst({
+      where: { customerCode: customerData.customerCode },
+    });
+    if (existingCustomer) {
+      return res
+        .status(400)
+        .json({ message: "รหัสลูกค้านี้มีการใช้ในระบบแล้ว กรุณากรอกใหม่" });
+    }
+
+    // ตรวจสอบ email format
+    if (customerData.email && !isValidEmail(customerData.email)) {
+      return res.status(400).json({ message: "รูปแบบอีเมลไม่ถูกต้อง" });
+    }
+
+    // เตรียมข้อมูลลูกค้า
+    const preparedCustomerData = prepareCustomerData(customerData);
+
+    // สร้างลูกค้าพร้อม addresses
+    const newCustomer = await prisma.customer.create({
+      data: {
+        ...preparedCustomerData,
+        addresses: {
+          create: customerData.addresses,
+        },
+      },
+      include: {
+        addresses: true,
+      },
+    });
+
+    // Sanitize customer data (ลบ branchName ถ้าเป็น null)
+    const sanitizedCustomer = sanitizeCustomer(newCustomer);
+
+    res.status(201).json({
+      message: "บันทึกข้อมูลติดต่อสำเร็จ",
+      data: {
+        customer: sanitizedCustomer,
+        addresses: newCustomer.addresses,
+      },
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "ไม่สร้างมารถบันทึกข้อมูลติดต่อได้", error });
+    console.error(error);
+    res.status(500).json({
+      message: "เกิดข้อผิดพลาดในการสร้างลูกค้า",
+    });
   }
 };
 
 export const getAllCustomers = async (req: Request, res: Response) => {
-  console.log("test");
   try {
-    const customers = await prisma.customer.findMany();
-    console.log(customers);
+    let page = parseInt(req.query.page as string) || 1;
+    let limit = parseInt(req.query.limit as string) || 5;
+    const maxPage = 5;
 
-    const customersWithAddresses = await Promise.all(
-      customers.map(async (customer) => {
-        const addresses = await prisma.address.findMany({
-          where: { customerId: customer.id },
-        });
-        return { ...customer, addresses };
-      })
-    );
-    res.status(200).json({ data: customersWithAddresses });
+    const totalCustomers = await prisma.customer.count();
+    const totalPage = Math.min(Math.ceil(totalCustomers / limit), maxPage);
+
+    if (page > totalPage) page = totalPage;
+    if (page < 1) page = 1;
+
+    const skip = (page - 1) * limit;
+
+    const customers = await prisma.customer.aggregateRaw({
+      pipeline: [
+        {
+          $lookup: {
+            from: "Address",
+            localField: "_id",
+            foreignField: "customerId",
+            as: "addresses",
+          },
+        },
+        { $skip: skip },
+        { $limit: limit },
+      ],
+    });
+
+    convertObjectIds(customers);
+
+    res.status(200).json({
+      message: "ดึงข้อมูลลูกค้าสำเร็จ",
+      page,
+      limit,
+      totalPage,
+      totalCustomers,
+      customers,
+    });
   } catch (error) {
-    res.status(500).json({ message: "ไม่สามารถดึงข้อมูลลูกค้าได้", error });
+    console.error(error);
+    res.status(500).json({
+      message: "เกิดข้อผิดพลาดระหว่างการเรียกดูลูกค้า",
+    });
   }
 };
 
@@ -196,7 +203,16 @@ export const getCustomerById = async (req: Request, res: Response) => {
     if (!customer) {
       return res.status(404).json({ message: "ไม่พบลูกค้าที่ระบุ" });
     }
-    res.status(200).json({ data: customer });
+    let sanitizedCustomer;
+
+    if (customer.branchName === null) {
+      // ลบ branchName ออกจาก object
+      const { branchName, ...rest } = customer;
+      sanitizedCustomer = rest;
+    } else {
+      sanitizedCustomer = customer;
+    }
+    res.status(200).json({ data: sanitizedCustomer });
   } catch (error) {
     res.status(500).json({ message: "ไม่สามารถดึงข้อมูลลูกค้าได้", error });
   }
@@ -229,16 +245,12 @@ export const deleteCustomerInformation = async (
     });
 
     // ลบ customer
-    const deletedCustomer = await prisma.customer.delete({
+    await prisma.customer.delete({
       where: { id },
     });
 
     res.status(200).json({
       message: "ลบข้อมูลลูกค้าสำเร็จ",
-      data: {
-        ...deletedCustomer,
-        addresses: existingCustomer.addresses,
-      },
     });
   } catch (error) {
     res.status(500).json({ message: "ไม่สามารถลบข้อมูลลูกค้าได้", error });
@@ -248,19 +260,22 @@ export const deleteCustomerInformation = async (
 export const editCustomerInformation = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    let {
-      customerType,
-      organizationType,
-      customerCode,
-      companyName,
-      email,
-      taxId,
-      phoneNumber,
-      profileImageUrl,
-    } = req.body;
     if (!id) {
       return res.status(400).json({ message: "กรุณาระบุ ID ลูกค้า" });
     }
+
+    // Validate input
+    const parsed = CustomerValidator.validateUpdateCustomer.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "ข้อมูลที่ส่งมาไม่ถูกต้อง",
+        errors: parsed.error.format(),
+      });
+    }
+
+    const updateData: ValidateUpdateCustomer = parsed.data;
+
+    // ตรวจว่าลูกค้ามีอยู่
     const existingCustomer = await prisma.customer.findUnique({
       where: { id },
     });
@@ -268,107 +283,68 @@ export const editCustomerInformation = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "ไม่พบลูกค้าที่ระบุ" });
     }
 
-    if (organizationType === "HEAD_OFFICE") {
-      if (email && !isValidEmail(email)) {
-        return res.status(400).json({ message: "รูปแบบอีเมลไม่ถูกต้อง" });
-      }
-      if (!customerCode || customerCode.trim() === "") {
-        customerCode = existingCustomer.customerCode;
-      }
-      if (!companyName || companyName.trim() === "") {
-        companyName = existingCustomer.companyName;
-      }
-      if (!taxId || taxId.trim() === "") {
-        taxId = existingCustomer.taxId;
-      }
-      if (!customerType || customerType.trim() === "") {
-        customerType = existingCustomer.customerType;
-      }
-      if (!organizationType || organizationType.trim() === "") {
-        organizationType = existingCustomer.organizationType;
-      }
-      if (!phoneNumber || phoneNumber.trim() === "") {
-        phoneNumber = existingCustomer.phoneNumber;
-      }
-      if (!profileImageUrl || profileImageUrl.trim() === "") {
-        profileImageUrl = existingCustomer.profileImageUrl;
-      }
-      if (!email || email.trim() === "") {
-        email = existingCustomer.email;
-      }
-      const updatedCustomer = await prisma.customer.update({
-        where: { id },
-        data: {
-          customerType,
-          organizationType,
-          customerCode,
-          companyName,
-          email,
-          taxId,
-          phoneNumber,
-          profileImageUrl,
-        },
-      });
-      res.status(200).json({
-        message: "แก้ไขข้อมูลลูกค้าสำเร็จ",
-        data: updatedCustomer,
-      });
-    } else if (organizationType === "BRANCH_OFFICE") {
-      let { branchId, branchName } = req.body;
-      if (!branchId || branchId.trim() === "") {
-        return res.status(400).json({ message: "กรุณากรอกรหัสสาขา" });
-      }
-      if (!branchName || branchName.trim() === "") {
-        return res.status(400).json({ message: "กรุณากรอกชื่อสาขา" });
-      }
-      if (email && !isValidEmail(email)) {
-        return res.status(400).json({ message: "รูปแบบอีเมลไม่ถูกต้อง" });
-      }
-      if (!customerCode || customerCode.trim() === "") {
-        customerCode = existingCustomer.customerCode;
-      }
-      if (!companyName || companyName.trim() === "") {
-        companyName = existingCustomer.companyName;
-      }
-      if (!taxId || taxId.trim() === "") {
-        taxId = existingCustomer.taxId;
-      }
-      if (!customerType || customerType.trim() === "") {
-        customerType = existingCustomer.customerType;
-      }
-      if (!organizationType || organizationType.trim() === "") {
-        organizationType = existingCustomer.organizationType;
-      }
-      if (!phoneNumber || phoneNumber.trim() === "") {
-        phoneNumber = existingCustomer.phoneNumber;
-      }
-      if (!profileImageUrl || profileImageUrl.trim() === "") {
-        profileImageUrl = existingCustomer.profileImageUrl;
-      }
-      if (!email || email.trim() === "") {
-        email = existingCustomer.email;
-      }
-      const updatedCustomer = await prisma.customer.update({
-        where: { id },
-        data: {
-          customerType,
-          organizationType,
-          customerCode,
-          companyName,
-          branchName,
-          email,
-          taxId,
-          phoneNumber,
-          profileImageUrl,
-        },
-      });
-      res.status(200).json({
-        message: "แก้ไขข้อมูลลูกค้าสำเร็จ",
-        data: updatedCustomer,
-      });
+    // ตรวจ email format
+    if (updateData.email && !isValidEmail(updateData.email)) {
+      return res.status(400).json({ message: "รูปแบบอีเมลไม่ถูกต้อง" });
     }
+
+    const prismaUpdateData: any = { ...updateData };
+
+    // map enum fields
+    if (updateData.customerType) {
+      prismaUpdateData.customerType = updateData.customerType as CustomerType;
+    }
+    if (updateData.organizationType) {
+      prismaUpdateData.organizationType =
+        updateData.organizationType as OrganizationType;
+    }
+
+    // ลบ addresses ออกถ้ามี
+    if (prismaUpdateData.addresses) {
+      delete prismaUpdateData.addresses;
+    }
+
+    // Logic เปลี่ยน organizationType
+    if (
+      existingCustomer.organizationType === "BRANCH_OFFICE" &&
+      updateData.organizationType === "HEAD_OFFICE"
+    ) {
+      // เปลี่ยน BRANCH → HEAD ลบ branchName
+      prismaUpdateData.branchName = null;
+    }
+
+    if (
+      existingCustomer.organizationType === "HEAD_OFFICE" &&
+      updateData.organizationType === "BRANCH_OFFICE"
+    ) {
+      // ต้องกรอก branchId และ branchName
+      if (!updateData.branchId || !updateData.branchName) {
+        return res.status(400).json({
+          message:
+            "เมื่อเปลี่ยนเป็น BRANCH_OFFICE ต้องกรอก branchId และ branchName",
+        });
+      }
+
+      // branchId ใช้แค่ validate ไม่ส่งเข้า Prisma
+      delete prismaUpdateData.branchId 
+      prismaUpdateData.branchName = updateData.branchName;      
+    }
+
+    const updatedCustomer = await prisma.customer.update({
+      where: { id },
+      data: prismaUpdateData,
+    });
+
+    res.status(200).json({
+      message: "แก้ไขข้อมูลลูกค้าสำเร็จ",
+      data: updatedCustomer,
+    });
   } catch (error) {
-    res.status(500).json({ message: "ไม่สามารถแก้ไขข้อมูลลูกค้าได้", error });
+    console.error(error);
+    res.status(500).json({
+      message: "ไม่สามารถแก้ไขข้อมูลลูกค้าได้",
+      error,
+    });
   }
 };
 
